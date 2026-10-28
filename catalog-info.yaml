@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payments
+  description: Authorizes card payments for orders.
+  annotations:
+    github.com/project-slug: agentkourier/demo-payments
+spec:
+  type: service
+  lifecycle: production
+  owner: group:payments
+  system: commerce
+  providesApis:
+    - payments-api
