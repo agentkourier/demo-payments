@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -21,7 +22,7 @@ type authorizeResponse struct {
 	AuthorizationID string `json:"authorization_id"`
 	OrderID         string `json:"order_id"`
 	Status          string `json:"status"`
-	Amount          int64  `json:"amount"` // cents
+	Amount          string `json:"amount"` // decimal, e.g. "42.50"
 	Currency        string `json:"currency"`
 }
 
@@ -60,12 +61,23 @@ func (h *authorizeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		AuthorizationID: newAuthorizationID(),
 		OrderID:         req.OrderID,
 		Status:          "approved",
-		Amount:          req.AmountCents,
+		Amount:          formatAmount(req.AmountCents),
 		Currency:        req.Currency,
 	}
 	h.logger.InfoContext(r.Context(), "payment authorized",
 		"order_id", resp.OrderID, "authorization_id", resp.AuthorizationID)
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// formatAmount formats an amount in minor units as a decimal string with two
+// places, e.g. 4250 -> "42.50".
+func formatAmount(cents int64) string {
+	sign := ""
+	if cents < 0 {
+		sign = "-"
+		cents = -cents
+	}
+	return fmt.Sprintf("%s%d.%02d", sign, cents/100, cents%100)
 }
 
 func newAuthorizationID() string {

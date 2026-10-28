@@ -24,12 +24,12 @@ Response (`200`):
   "authorization_id": "auth_7QZK2M4XJ5RVT3WA",
   "order_id": "ord_1001",
   "status": "approved",
-  "amount": 4250,
+  "amount": "42.50",
   "currency": "USD"
 }
 ```
 
-`amount` is in minor units (cents).
+`amount` is a decimal string with two places.
 
 ### Operational endpoints
 
