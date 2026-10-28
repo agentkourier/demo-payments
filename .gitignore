@@ -1,0 +1,4 @@
+/bin/
+/payments
+*.test
+*.out
