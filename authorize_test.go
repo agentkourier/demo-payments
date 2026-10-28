@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestAuthorize(t *testing.T) {
@@ -104,7 +106,7 @@ func TestAuthorizeMethodNotAllowed(t *testing.T) {
 
 func TestProbes(t *testing.T) {
 	var ready atomic.Bool
-	router := newRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), &ready)
+	router := newRouter(discardLogger(), prometheus.NewRegistry(), &ready)
 
 	tests := []struct {
 		path  string
@@ -128,5 +130,9 @@ func TestProbes(t *testing.T) {
 func newTestRouter() http.Handler {
 	var ready atomic.Bool
 	ready.Store(true)
-	return newRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), &ready)
+	return newRouter(discardLogger(), prometheus.NewRegistry(), &ready)
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

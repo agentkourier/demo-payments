@@ -11,13 +11,18 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "payments", "version", version)
+	logger := slog.New(traceLogHandler{slog.NewJSONHandler(os.Stdout, nil)}).
+		With("service", serviceName, "version", version)
 	if err := run(logger); err != nil {
 		logger.Error("payments exited", "error", err)
 		os.Exit(1)
@@ -28,15 +33,28 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	shutdownTracing, err := setupTracing(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTracing(ctx); err != nil {
+			logger.Error("flush traces", "error", err)
+		}
+	}()
+
 	addr := os.Getenv("ADDR")
 	if addr == "" {
 		addr = ":8080"
 	}
 
 	var ready atomic.Bool
+	reg := prometheus.NewRegistry()
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           newRouter(logger, &ready),
+		Handler:           newRouter(logger, reg, &ready),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -66,7 +84,9 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-func newRouter(logger *slog.Logger, ready *atomic.Bool) http.Handler {
+// newRouter returns the service's HTTP handler. Requests other than probes and
+// metrics scrapes get a server span; every request is counted and timed.
+func newRouter(logger *slog.Logger, reg *prometheus.Registry, ready *atomic.Bool) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("POST /v1/authorize", &authorizeHandler{logger: logger})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -79,5 +99,8 @@ func newRouter(logger *slog.Logger, ready *atomic.Bool) http.Handler {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	return mux
+	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
+	return otelhttp.NewHandler(instrument(logger, newMetrics(reg), mux), serviceName,
+		otelhttp.WithFilter(func(r *http.Request) bool { return !isProbe(r.URL.Path) }))
 }
