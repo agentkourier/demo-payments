@@ -30,7 +30,7 @@ func TestAuthorize(t *testing.T) {
 			wantBody: map[string]any{
 				"order_id": "ord_1001",
 				"status":   "approved",
-				"amount":   float64(4250),
+				"amount":   "42.50",
 				"currency": "USD",
 			},
 		},
@@ -93,6 +93,25 @@ func TestAuthorize(t *testing.T) {
 				t.Errorf("body = %v, want %v", got, tt.wantBody)
 			}
 		})
+	}
+}
+
+func TestFormatAmount(t *testing.T) {
+	tests := []struct {
+		cents int64
+		want  string
+	}{
+		{4250, "42.50"},
+		{1, "0.01"},
+		{99, "0.99"},
+		{100, "1.00"},
+		{123456789, "1234567.89"},
+		{-505, "-5.05"},
+	}
+	for _, tt := range tests {
+		if got := formatAmount(tt.cents); got != tt.want {
+			t.Errorf("formatAmount(%d) = %q, want %q", tt.cents, got, tt.want)
+		}
 	}
 }
 
